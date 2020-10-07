@@ -57,8 +57,9 @@
 (defn step [state stmt]
   (match stmt
     [:assign v e] [(assoc state v (eval-exp state e)) []]
-    [:if e b] [state (if (eval-exp state e) b [])]
-    [:if e b1 b2] [state (if (eval-exp state e) b1 b2)]
+    [:if e s] [state (if (eval-exp state e) s [])]
+    [:if e s1 s2] [state (if (eval-exp state e) s1 s2)]
+    [:while e s] [state (if (eval-exp state e) (conj (vec s) stmt) [])]
     _ [state []]))
 
 (defn skip-await [stmt]
