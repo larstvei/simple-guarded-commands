@@ -1,8 +1,8 @@
 (ns exogenous-simple-guarded.core
-  (:require [instaparse.core :as insta]
-            [clojure.core.match :refer [match]]
+  (:require [clojure.core.match :refer [match]]
             [clojure.java.io :as io]
-            [clojure.set :as s]))
+            [clojure.set :as s]
+            [instaparse.core :as insta]))
 
 (def simple-guarded-parser
   (-> (io/resource "simple-guarded.grammar")
