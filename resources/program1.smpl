@@ -1,0 +1,16 @@
+thread {
+  x <- x + 1
+}
+
+thread {
+  x <- x + 1
+}
+
+thread {
+  x <- x + 3
+}
+
+thread {
+  await x = 3;
+  y <- 2
+}

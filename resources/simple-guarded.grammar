@@ -1,0 +1,19 @@
+(* Simple guarded langauge *)
+<prog> := thread*
+thread := <'thread'> <'{'> stmt <'}'>
+
+(* Statements *)
+<stmt>  := exp | assign | await | if | while | stmt <';'> stmt
+assign  := var <'<-'> exp
+await   := <'await'> exp
+if      := <'if'> exp block [<'else'> block]
+while   := <'while'> exp block
+block   := <'{'> stmt <'}'>
+
+(* Expressions *)
+exp   := exp (op | rel) exp | paren | var | num
+paren := <'('> exp <')'>
+op    := '*' | '+' | '-'
+rel   := '<' | '<=' | '=' | '>=' | '>'
+num   := #'[0-9]+'
+var   := #'[a-zA-Z][a-zA-Z0-9]*'
