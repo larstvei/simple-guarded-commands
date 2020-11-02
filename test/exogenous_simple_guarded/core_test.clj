@@ -1,11 +1,13 @@
 (ns exogenous-simple-guarded.core-test
   (:require [clojure.test :refer :all]
             [clojure.java.io :as io]
+            [exogenous-simple-guarded.analysis :as analysis]
             [exogenous-simple-guarded.core :as lang]
             [exogenous-simple-guarded.parser :as parser]))
 
 (def program1 (slurp (io/resource "program1.smpl")))
 (def program2 (slurp (io/resource "program2.smpl")))
+(def nested (slurp (io/resource "nested.smpl")))
 
 (deftest parsing
   (is '([:thread
@@ -43,8 +45,15 @@
     (is (= state {:x 5}))))
 
 (deftest record&replay
+  ;; program1
   (let [[state1 trace1 status1] (lang/simulate program1)
         [state2 trace2 status2] (lang/simulate program1 {:trace trace1})]
+    (is (= state1 state2))
+    (is (= trace1 trace2))
+    (is (= status1 status2)))
+  ;; program2
+  (let [[state1 trace1 status1] (lang/simulate program2)
+        [state2 trace2 status2] (lang/simulate program2 {:trace trace1})]
     (is (= state1 state2))
     (is (= trace1 trace2))
     (is (= status1 status2))))
