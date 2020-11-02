@@ -7,7 +7,6 @@
 
 (def program1 (slurp (io/resource "program1.smpl")))
 (def program2 (slurp (io/resource "program2.smpl")))
-(def nested (slurp (io/resource "nested.smpl")))
 
 (deftest parsing
   (is '([:thread

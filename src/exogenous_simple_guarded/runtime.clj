@@ -46,6 +46,9 @@
   (cond (empty? thread-pool) :success
         (every? (complement (partial unblocked? state)) thread-pool) :deadlock))
 
+(defn next-seq [t recorded]
+  (count (filter (comp (partial = t) :thread) recorded)))
+
 (defn exec [state thread-pool replay recorded]
   (if-let [status (terminated-with-status state thread-pool)]
     [state recorded status]
@@ -56,5 +59,5 @@
           new-thread-pool (update-thread-pool state thread-pool t new-stmts)
           new-replay (rest replay)
           new-recorded (conj recorded (-> read-writes (assoc :thread t)
-                                          (assoc :seq (count recorded))))]
+                                          (assoc :seq (next-seq t recorded))))]
       (recur new-state new-thread-pool new-replay new-recorded))))

@@ -1,13 +1,34 @@
 (ns exogenous-simple-guarded.core
-  (:require [exogenous-simple-guarded.parser :refer [parse]]
-            [exogenous-simple-guarded.runtime :refer [exec]]))
+  (:require [clojure.java.io :as io]
+            [exogenous-simple-guarded.analysis :as analysis]
+            [exogenous-simple-guarded.parser :as parser]
+            [exogenous-simple-guarded.runtime :as runtime]
+            [exogenous.core :as exo]))
+
+(def program1 (slurp (io/resource "program1.smpl")))
 
 (defn simulate
   ([program-str] (simulate program-str {}))
   ([program-str options]
    (let [init-state (or (:init-state options) {})
-         ast (parse program-str)
+         ast (or (:ast options) (parser/parse program-str))
          thread-pool (zipmap (range) (map rest ast))
          replay (:trace options)
          recorded []]
-     (exec init-state thread-pool replay recorded))))
+     (runtime/exec init-state thread-pool replay recorded))))
+
+(defn exo-sim [program-str]
+  (let [ast (parser/parse program-str)]
+    (fn [seed-trace]
+      (prn seed-trace)
+      (prn)
+      (let [[state trace status] (simulate program-str {:trace seed-trace :ast ast})
+            mhb (analysis/mhb trace)
+            interference (analysis/interference trace)]
+        {:trace trace :mhb mhb :interference interference}))))
+
+(defn exo-explore
+  ([program-str]
+   (exo-explore program-str {}))
+  ([program-str options]
+   (exo/informed-explore (exo-sim program-str) options)))
