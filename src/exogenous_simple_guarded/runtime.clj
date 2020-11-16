@@ -58,6 +58,8 @@
           [new-state new-stmts] (step state stmt)
           new-thread-pool (update-thread-pool state thread-pool t new-stmts)
           new-replay (rest replay)
-          new-recorded (conj recorded (-> read-writes (assoc :thread t)
+          new-recorded (conj recorded (-> read-writes
+                                          (assoc :type :schedule)
+                                          (assoc :thread t)
                                           (assoc :seq (next-seq t recorded))))]
       (recur new-state new-thread-pool new-replay new-recorded))))

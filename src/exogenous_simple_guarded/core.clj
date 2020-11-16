@@ -13,8 +13,10 @@
    (let [init-state (or (:init-state options) {})
          ast (or (:ast options) (parser/parse program-str))
          thread-pool (zipmap (range) (map rest ast))
-         replay (:trace options)
-         recorded []]
+         replay (filterv #(= :schedule (:type %))(:trace options))
+         recorded (->> (keys thread-pool)
+                       (map (fn [id] {:type :spawn :thread id}))
+                       (into []))]
      (runtime/exec init-state thread-pool replay recorded))))
 
 (defn exo-sim [program-str]
