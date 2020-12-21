@@ -35,16 +35,22 @@
     [:await e] (rest stmt)
     :else stmt))
 
-(defn update-thread-pool [state thread-pool t stmts]
-  (let [thread (rest (skip-await (thread-pool t)))
-        new-thread (into [] (concat stmts thread))]
-    (if (empty? new-thread)
-      (dissoc thread-pool t)
-      (assoc thread-pool t new-thread))))
+(defn threads->thread-pool [state threads]
+  (let [pred (partial unblocked? state)]
+    {:ready (into {} (filter pred threads))
+     :blocked (into {} (filter (complement pred) threads))}))
 
-(defn terminated-with-status [state thread-pool]
-  (cond (empty? thread-pool) :success
-        (every? (complement (partial unblocked? state)) thread-pool) :deadlock))
+(defn update-thread-pool [state {:keys [ready blocked]} t stmts]
+  (let [thread (rest (skip-await (ready t)))
+        new-thread (into [] (concat stmts thread))
+        threads (merge (dissoc ready t) blocked)]
+    (if (empty? new-thread)
+      (threads->thread-pool state threads)
+      (threads->thread-pool state (conj threads new-thread)))))
+
+(defn terminated-with-status [state {:keys [ready blocked]}]
+  (cond (and (empty? ready) (empty? blocked)) :success
+        (and (empty? ready) (not (empty? blocked))) :deadlock))
 
 (defn next-seq [t recorded]
   (count (filter (comp (partial = t) :thread) recorded)))
@@ -52,11 +58,11 @@
 (defn exec [state thread-pool replay recorded]
   (if-let [status (terminated-with-status state thread-pool)]
     [state recorded status]
-    (let [t (schedule state thread-pool replay)
-          stmt (first (skip-await (thread-pool t)))
+    (let [t (schedule state (:ready thread-pool) replay)
+          stmt (first (skip-await ((:ready thread-pool) t)))
           read-writes (read-write-sets stmt)
           [new-state new-stmts] (step state stmt)
-          new-thread-pool (update-thread-pool state thread-pool t new-stmts)
+          new-thread-pool (update-thread-pool new-state thread-pool t new-stmts)
           new-replay (rest replay)
           new-recorded (conj recorded (-> read-writes
                                           (assoc :type :schedule)

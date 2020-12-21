@@ -16,12 +16,14 @@
     [:exp (x :guard keyword?)] {:reads #{x} :writes #{}}
     :else {:reads #{} :writes #{}}))
 
+(defn abstract-event [e]
+  (select-keys e [:thread :seq]))
 
 (defn mhb [trace]
   (set (for [{t1 :thread s1 :seq :as e1} trace
              {t2 :thread s2 :seq :as e2} trace
              :when (and (= t1 t2) (< s1 s2))]
-         [e1 e2])))
+         [(abstract-event e1) (abstract-event e2)])))
 
 (defn interference [trace]
   (set (for [{t1 :thread s1 :seq r1 :reads w1 :writes :as e1} trace
@@ -29,7 +31,12 @@
              :when (and (not= t1 t2)
                         (or (not (empty? (s/intersection w1 (s/union r2 w2))))
                             (not (empty? (s/intersection w2 (s/union r1 w1))))))]
-         [e1 e2])))
+         [(abstract-event e1) (abstract-event e2)])))
+
+(defn make-spawn-events [init-state thread-pool]
+  (->> (s/union (keys (:ready thread-pool)) (keys (:blocked thread-pool)))
+       (mapv (fn [id] {:type :spawn :thread id :seq 0}))))
+
 
 (comment
   ;; These functions allow us to flatten an abstract syntax tree, which
