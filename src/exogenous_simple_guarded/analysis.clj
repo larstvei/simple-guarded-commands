@@ -4,17 +4,33 @@
 
 (defn read-write-sets [stmt]
   (match stmt
-    [:assign v e] (-> (read-write-sets e)
-                      (update :writes conj v))
-    [:if e _] (read-write-sets e)
-    [:if e _ _] (read-write-sets e)
-    [:while e _] (read-write-sets e)
-    [:exp e1 op e2] (merge-with s/union
-                                (read-write-sets e1)
-                                (read-write-sets e2))
-    [:exp [:paren e]] (read-write-sets e)
-    [:exp (x :guard keyword?)] {:reads #{x} :writes #{}}
-    :else {:reads #{} :writes #{}}))
+         [:assign v e] (-> (read-write-sets e)
+                           (update :writes conj v))
+         [:if e _] (read-write-sets e)
+         [:if e _ _] (read-write-sets e)
+         [:while e _] (read-write-sets e)
+         [:exp e1 op e2] (merge-with s/union
+                                     (read-write-sets e1)
+                                     (read-write-sets e2))
+         [:exp [:paren e]] (read-write-sets e)
+         [:exp (x :guard keyword?)] {:reads #{x} :writes #{}}
+         :else {:reads #{} :writes #{}}))
+
+(defn next-seq [t recorded]
+  (count (filter (comp (partial = t) :thread) recorded)))
+
+(defn make-event [type recorded t]
+  {:type type :thread t :seq (next-seq t recorded)})
+
+(def ready (comp set keys :ready))
+(def blocked (comp set keys :blocked))
+
+(defn enable-disable-events [thread-pool new-thread-pool recorded]
+  (let [enabled (s/difference (ready new-thread-pool) (ready thread-pool))
+        disabled (s/difference (blocked new-thread-pool) (blocked thread-pool))
+        enable-events (mapv (partial make-event :enable recorded) enabled)
+        disable-events (mapv (partial make-event :disable recorded) disabled)]
+    (into enable-events disable-events)))
 
 (defn abstract-event [e]
   (select-keys e [:thread :seq]))
@@ -32,11 +48,6 @@
                         (or (not (empty? (s/intersection w1 (s/union r2 w2))))
                             (not (empty? (s/intersection w2 (s/union r1 w1))))))]
          [(abstract-event e1) (abstract-event e2)])))
-
-(defn make-spawn-events [init-state thread-pool]
-  (->> (s/union (keys (:ready thread-pool)) (keys (:blocked thread-pool)))
-       (mapv (fn [id] {:type :spawn :thread id :seq 0}))))
-
 
 (comment
   ;; These functions allow us to flatten an abstract syntax tree, which
@@ -58,11 +69,11 @@
 
   (defn flatten-stmts [stmts]
     (match stmts
-      [[:if e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
-      [[:if e s1 s2] & ss] (concat [e] (mapcat flatten-stmts [s1 s2 ss]))
-      [[:while e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
-      [stmt & ss] (concat [stmt] (flatten-stmts ss))
-      [] []))
+           [[:if e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
+           [[:if e s1 s2] & ss] (concat [e] (mapcat flatten-stmts [s1 s2 ss]))
+           [[:while e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
+           [stmt & ss] (concat [stmt] (flatten-stmts ss))
+           [] []))
 
   (defn flatten-ast [ast]
     (for [thread ast]

@@ -1,6 +1,6 @@
 (ns exogenous-simple-guarded.runtime
   (:require [clojure.core.match :refer [match]]
-            [exogenous-simple-guarded.analysis :refer [read-write-sets]]))
+            [exogenous-simple-guarded.analysis :as analysis]))
 
 (defn eval-exp [state exp]
   (match exp
@@ -52,20 +52,20 @@
   (cond (and (empty? ready) (empty? blocked)) :success
         (and (empty? ready) (not (empty? blocked))) :deadlock))
 
-(defn next-seq [t recorded]
-  (count (filter (comp (partial = t) :thread) recorded)))
-
 (defn exec [state thread-pool replay recorded]
   (if-let [status (terminated-with-status state thread-pool)]
     [state recorded status]
     (let [t (schedule state (:ready thread-pool) replay)
           stmt (first (skip-await ((:ready thread-pool) t)))
-          read-writes (read-write-sets stmt)
+          read-writes (analysis/read-write-sets stmt)
           [new-state new-stmts] (step state stmt)
           new-thread-pool (update-thread-pool new-state thread-pool t new-stmts)
           new-replay (rest replay)
-          new-recorded (conj recorded (-> read-writes
-                                          (assoc :type :schedule)
-                                          (assoc :thread t)
-                                          (assoc :seq (next-seq t recorded))))]
+          new-event (-> read-writes
+                        (assoc :type :schedule)
+                        (assoc :thread t)
+                        (assoc :seq (analysis/next-seq t recorded)))
+          new-recorded (apply conj recorded new-event
+                              (analysis/enable-disable-events
+                               thread-pool new-thread-pool recorded))]
       (recur new-state new-thread-pool new-replay new-recorded))))

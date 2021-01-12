@@ -15,7 +15,7 @@
          threads (zipmap (range) (map rest ast))
          thread-pool (runtime/threads->thread-pool init-state threads)
          replay (filterv #(= :schedule (:type %)) (:trace options))
-         recorded (analysis/make-spawn-events init-state thread-pool)]
+         recorded (analysis/enable-disable-events {} thread-pool [])]
      (runtime/exec init-state thread-pool replay recorded))))
 
 (defn exo-sim [program-str]
