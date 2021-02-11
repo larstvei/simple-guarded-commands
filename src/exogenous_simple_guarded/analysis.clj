@@ -4,36 +4,49 @@
 
 (defn read-write-sets [stmt]
   (match stmt
-         [:assign v e] (-> (read-write-sets e)
-                           (update :writes conj v))
-         [:if e _] (read-write-sets e)
-         [:if e _ _] (read-write-sets e)
-         [:while e _] (read-write-sets e)
-         [:exp e1 op e2] (merge-with s/union
-                                     (read-write-sets e1)
-                                     (read-write-sets e2))
-         [:exp [:paren e]] (read-write-sets e)
-         [:exp (x :guard keyword?)] {:reads #{x} :writes #{}}
-         :else {:reads #{} :writes #{}}))
+    [:assign v e] (-> (read-write-sets e)
+                      (update :writes conj v))
+    [:if e _] (read-write-sets e)
+    [:if e _ _] (read-write-sets e)
+    [:while e _] (read-write-sets e)
+    [:exp e1 op e2] (merge-with s/union
+                                (read-write-sets e1)
+                                (read-write-sets e2))
+    [:exp [:paren e]] (read-write-sets e)
+    [:exp (x :guard keyword?)] {:reads #{x} :writes #{}}
+    :else {:reads #{} :writes #{}}))
 
 (defn next-seq [t recorded]
-  (count (filter (comp (partial = t) :thread) recorded)))
+  (count (filter (fn [{:keys [thread type]}]
+                   (and (= t thread) (= type :schedule)))
+                 recorded)))
 
-(defn make-event [type recorded t]
-  {:type type :thread t :seq (next-seq t recorded)})
+(defn make-event [type read-writes recorded t]
+  (-> read-writes
+      (assoc :type type)
+      (assoc :thread t)
+      (assoc :seq (next-seq t recorded))))
 
-(def ready (comp set keys :ready))
-(def blocked (comp set keys :blocked))
+(defn thread->schedule-event [thread-pool recorded t]
+  (let [rw (match (first ((:disabled thread-pool) t))
+             [:await e] (read-write-sets e)
+             :else {})]
+    (make-event :schedule rw recorded t)))
 
-(defn enable-disable-events [thread-pool new-thread-pool recorded]
-  (let [enabled (s/difference (ready new-thread-pool) (ready thread-pool))
-        disabled (s/difference (blocked new-thread-pool) (blocked thread-pool))
-        enable-events (mapv (partial make-event :enable recorded) enabled)
-        disable-events (mapv (partial make-event :disable recorded) disabled)]
-    (into enable-events disable-events)))
+(defn thread-pool->enabled-disabled [thread-pool recorded]
+  (let [t->e (partial thread->schedule-event thread-pool recorded)]
+    (-> thread-pool
+        (update :enabled (comp set keys))
+        (update :enabled #(set (map t->e %)))
+        (update :disabled (comp set keys))
+        (update :disabled #(set (map t->e %))))))
 
 (defn abstract-event [e]
-  (select-keys e [:thread :seq]))
+  (select-keys e [:type :thread :seq]))
+
+(defn abstract-enabled-disabled [{:keys [enabled disabled]}]
+  {:enabled (set (map abstract-event enabled))
+   :disabled (set (map abstract-event disabled))})
 
 (defn mhb [trace]
   (set (for [{t1 :thread s1 :seq :as e1} trace
@@ -41,9 +54,9 @@
              :when (and (= t1 t2) (< s1 s2))]
          [(abstract-event e1) (abstract-event e2)])))
 
-(defn interference [trace]
-  (set (for [{t1 :thread s1 :seq r1 :reads w1 :writes :as e1} trace
-             {t2 :thread s2 :seq r2 :reads w2 :writes :as e2} trace
+(defn interference [events]
+  (set (for [{t1 :thread r1 :reads w1 :writes :as e1} events
+             {t2 :thread r2 :reads w2 :writes :as e2} events
              :when (and (not= t1 t2)
                         (or (not (empty? (s/intersection w1 (s/union r2 w2))))
                             (not (empty? (s/intersection w2 (s/union r1 w1))))))]
@@ -69,11 +82,11 @@
 
   (defn flatten-stmts [stmts]
     (match stmts
-           [[:if e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
-           [[:if e s1 s2] & ss] (concat [e] (mapcat flatten-stmts [s1 s2 ss]))
-           [[:while e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
-           [stmt & ss] (concat [stmt] (flatten-stmts ss))
-           [] []))
+      [[:if e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
+      [[:if e s1 s2] & ss] (concat [e] (mapcat flatten-stmts [s1 s2 ss]))
+      [[:while e s] & ss] (concat [e] (mapcat flatten-stmts [s ss]))
+      [stmt & ss] (concat [stmt] (flatten-stmts ss))
+      [] []))
 
   (defn flatten-ast [ast]
     (for [thread ast]

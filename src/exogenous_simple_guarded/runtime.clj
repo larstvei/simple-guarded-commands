@@ -24,11 +24,11 @@
     :else t))
 
 (defn schedule [state thread-pool [event & replay]]
-  (let [unblocked (keep (partial unblocked? state) thread-pool)]
+  (let [enabled (keys (:enabled thread-pool))]
     (if-let [t (:thread event)]
-      (do (assert ((set unblocked) t))
+      (do (assert ((set enabled) t))
           t)
-      (rand-nth unblocked))))
+      (rand-nth enabled))))
 
 (defn skip-await [stmt]
   (match (first stmt)
@@ -37,35 +37,32 @@
 
 (defn threads->thread-pool [state threads]
   (let [pred (partial unblocked? state)]
-    {:ready (into {} (filter pred threads))
-     :blocked (into {} (filter (complement pred) threads))}))
+    {:enabled (into {} (filter pred threads))
+     :disabled (into {} (filter (complement pred) threads))}))
 
-(defn update-thread-pool [state {:keys [ready blocked]} t stmts]
-  (let [thread (rest (skip-await (ready t)))
+(defn update-thread-pool [state {:keys [enabled disabled]} t stmts]
+  (let [thread (rest (skip-await (enabled t)))
         new-thread (into [] (concat stmts thread))
-        threads (merge (dissoc ready t) blocked)]
+        threads (merge (dissoc enabled t) disabled)]
     (if (empty? new-thread)
       (threads->thread-pool state threads)
-      (threads->thread-pool state (conj threads new-thread)))))
+      (threads->thread-pool state (assoc threads t new-thread)))))
 
-(defn terminated-with-status [state {:keys [ready blocked]}]
-  (cond (and (empty? ready) (empty? blocked)) :success
-        (and (empty? ready) (not (empty? blocked))) :deadlock))
+(defn terminated-with-status [state {:keys [enabled disabled]}]
+  (cond (and (empty? enabled) (empty? disabled)) :success
+        (and (empty? enabled) (not (empty? disabled))) :deadlock))
 
-(defn exec [state thread-pool replay recorded]
+(defn exec [state thread-pool replay recorded enabled-disabled]
   (if-let [status (terminated-with-status state thread-pool)]
-    [state recorded status]
-    (let [t (schedule state (:ready thread-pool) replay)
-          stmt (first (skip-await ((:ready thread-pool) t)))
+    [state recorded enabled-disabled status]
+    (let [t (schedule state thread-pool replay)
+          stmt (first (skip-await ((:enabled thread-pool) t)))
           read-writes (analysis/read-write-sets stmt)
           [new-state new-stmts] (step state stmt)
           new-thread-pool (update-thread-pool new-state thread-pool t new-stmts)
           new-replay (rest replay)
-          new-event (-> read-writes
-                        (assoc :type :schedule)
-                        (assoc :thread t)
-                        (assoc :seq (analysis/next-seq t recorded)))
-          new-recorded (apply conj recorded new-event
-                              (analysis/enable-disable-events
-                               thread-pool new-thread-pool recorded))]
-      (recur new-state new-thread-pool new-replay new-recorded))))
+          new-event (analysis/make-event :schedule read-writes recorded t)
+          new-recorded (conj recorded new-event)
+          new-enabled-disabled (->> (analysis/thread-pool->enabled-disabled new-thread-pool new-recorded)
+                                    (conj enabled-disabled))]
+      (recur new-state new-thread-pool new-replay new-recorded new-enabled-disabled))))
