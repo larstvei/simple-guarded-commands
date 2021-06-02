@@ -28,8 +28,11 @@
       (assoc :seq (next-seq t recorded))))
 
 (defn thread->schedule-event [thread-pool recorded t]
-  (let [rw (match (first ((:disabled thread-pool) t))
-             [:await e] (read-write-sets e)
+  (let [rw (match (vec ((:disabled thread-pool) t))
+             [[:await e] stmt & _] (merge-with s/union
+                                               (read-write-sets e)
+                                               (read-write-sets stmt))
+             [[:await e]] (s/union (read-write-sets e))
              :else {})]
     (make-event :schedule rw recorded t)))
 

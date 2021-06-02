@@ -6,8 +6,11 @@
             [exogenous.core :as exo]))
 
 (def program1 (slurp (io/resource "program1.smpl")))
-(def program2 (slurp (io/resource "program1.smpl")))
+(def program1-with-noise (slurp (io/resource "program1-with-noise.smpl")))
+(def program1-with-y (slurp (io/resource "program1-with-y.smpl")))
+(def program2 (slurp (io/resource "program2.smpl")))
 (def program-rudi (slurp (io/resource "program1-rudi-style.smpl")))
+(def einar-bug (slurp (io/resource "einar-bug.smpl")))
 
 (defn syncprn [& args]
   (locking syncprn
