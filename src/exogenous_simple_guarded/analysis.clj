@@ -14,6 +14,9 @@
                                 (read-write-sets e2))
     [:exp [:paren e]] (read-write-sets e)
     [:exp (x :guard keyword?)] {:reads #{x} :writes #{}}
+    [:guarded e s] (merge-with s/union
+                               (read-write-sets e)
+                               (read-write-sets s))
     :else {:reads #{} :writes #{}}))
 
 (defn next-seq [t recorded]
@@ -29,10 +32,9 @@
 
 (defn thread->schedule-event [thread-pool recorded t]
   (let [rw (match (vec ((:disabled thread-pool) t))
-             [[:await e] stmt & _] (merge-with s/union
-                                               (read-write-sets e)
-                                               (read-write-sets stmt))
-             [[:await e]] (s/union (read-write-sets e))
+             [[:guarded e stmt] & _] (merge-with s/union
+                                                 (read-write-sets e)
+                                                 (read-write-sets stmt))
              :else {})]
     (make-event :schedule rw recorded t)))
 

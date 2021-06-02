@@ -1,16 +1,15 @@
 thread {
-  x <- x + 1
+  x := x + 1
 }
 
 thread {
-  x <- x + 1
+  x := x + 1
 }
 
 thread {
-  x <- x + 3
+  x := x + 3
 }
 
 thread {
-  await x = 3;
-  y <- 2
+  x = 3 |> y := 2
 }

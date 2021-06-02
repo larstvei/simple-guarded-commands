@@ -12,6 +12,7 @@
 
 (defn step [state stmt]
   (match stmt
+    [:guarded e s] (do (assert (eval-exp state e)) (step state s))
     [:assign v e] [(assoc state v (eval-exp state e)) []]
     [:if e s] [state (if (eval-exp state e) s [])]
     [:if e s1 s2] [state (if (eval-exp state e) s1 s2)]
@@ -20,7 +21,7 @@
 
 (defn unblocked? [state [t stmt]]
   (match (first stmt)
-    [:await e] (when (eval-exp state e) t)
+    [:guarded e _] (when (eval-exp state e) t)
     :else t))
 
 (defn schedule [state thread-pool [event & replay]]
@@ -30,18 +31,13 @@
           t)
       (rand-nth enabled))))
 
-(defn skip-await [stmt]
-  (match (first stmt)
-    [:await e] (rest stmt)
-    :else stmt))
-
 (defn threads->thread-pool [state threads]
   (let [pred (partial unblocked? state)]
     {:enabled (into {} (filter pred threads))
      :disabled (into {} (filter (complement pred) threads))}))
 
 (defn update-thread-pool [state {:keys [enabled disabled]} t stmts]
-  (let [thread (rest (skip-await (enabled t)))
+  (let [thread (rest (enabled t))
         new-thread (into [] (concat stmts thread))
         threads (merge (dissoc enabled t) disabled)]
     (if (empty? new-thread)
@@ -56,7 +52,7 @@
   (if-let [status (terminated-with-status state thread-pool)]
     [state recorded enabled-disabled status]
     (let [t (schedule state thread-pool replay)
-          stmt (first (skip-await ((:enabled thread-pool) t)))
+          stmt (first ((:enabled thread-pool) t))
           read-writes (analysis/read-write-sets stmt)
           [new-state new-stmts] (step state stmt)
           new-thread-pool (update-thread-pool new-state thread-pool t new-stmts)

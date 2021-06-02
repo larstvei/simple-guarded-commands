@@ -3,9 +3,9 @@
 thread := <'thread'> <'{'> stmt <'}'>
 
 (* Statements *)
-<stmt>  := exp | assign | await | if | while | stmt <';'> stmt
-assign  := var <'<-'> exp
-await   := <'await'> exp
+<stmt>  := assign | guarded | while | stmt <';'> stmt
+assign  := var <':='> exp
+guarded := exp <'|>'> assign
 if      := <'if'> exp block [<'else'> block]
 while   := <'while'> exp block
 block   := <'{'> stmt <'}'>
