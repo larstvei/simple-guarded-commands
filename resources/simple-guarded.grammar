@@ -3,7 +3,7 @@
 thread := <'thread'> <'{'> stmt <'}'>
 
 (* Statements *)
-<stmt>  := assign | guarded | while | stmt <';'> stmt
+<stmt>  := assign | guarded | if | while | stmt <';'> stmt
 assign  := var <':='> exp
 guarded := exp <'|>'> assign
 if      := <'if'> exp block [<'else'> block]
